@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Routes, Route, Link, useNavigate, useParams } from 'react-router-dom'
-import { Search, Menu, User, Plus, LogOut, Lock, Trash2 } from 'lucide-react'
+import { Search, Menu, User, Plus, LogOut, Lock, Trash2, Coffee, AlertTriangle, X, Mail } from 'lucide-react'
+import { supabase } from './supabaseClient'
 
 // Dummy Data Awal
 const initialVideos = [
@@ -17,6 +18,26 @@ const initialVideos = [
 function App() {
   const [videos, setVideos] = useState(initialVideos);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+  const [session, setSession] = useState(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  }
 
   const addVideo = (newVideo) => {
     setVideos([{ ...newVideo, id: Date.now() }, ...videos]);
@@ -51,7 +72,22 @@ function App() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Link to="/admin" className="p-2 rounded-full hover:bg-slate-800 transition-colors">
+            {session ? (
+              <div className="flex items-center gap-3 bg-slate-800 rounded-full pl-2 pr-4 py-1 border border-white/5">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center font-bold text-xs uppercase">
+                  {session.user.email[0]}
+                </div>
+                <span className="text-sm font-medium hidden md:block max-w-[100px] truncate">{session.user.email}</span>
+                <button onClick={handleSignOut} className="text-slate-400 hover:text-red-400 transition-colors ml-2" title="Keluar">
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setShowLoginModal(true)} className="bg-blue-600 hover:bg-blue-700 text-sm font-semibold px-4 py-2 rounded-full transition-colors">
+                Login / Daftar
+              </button>
+            )}
+            <Link to="/admin" className="p-2 rounded-full hover:bg-slate-800 transition-colors" title="Admin Area">
               <User className="w-6 h-6 text-slate-300" />
             </Link>
           </div>
@@ -79,7 +115,7 @@ function App() {
         <main className="flex-1 overflow-y-auto p-4 md:p-6 w-full">
           <Routes>
             <Route path="/" element={<Home videos={videos} />} />
-            <Route path="/video/:id" element={<VideoPlayer videos={videos} />} />
+            <Route path="/video/:id" element={<VideoPlayer videos={videos} session={session} onOpenLogin={() => setShowLoginModal(true)} />} />
             <Route path="/admin" element={<Admin 
               isLoggedIn={isAdminLoggedIn} 
               setIsLoggedIn={setIsAdminLoggedIn} 
@@ -89,6 +125,80 @@ function App() {
             />} />
           </Routes>
         </main>
+      </div>
+
+      {/* Login Modal */}
+      {showLoginModal && (
+        <AuthModal onClose={() => setShowLoginModal(false)} />
+      )}
+    </div>
+  )
+}
+
+function AuthModal({ onClose }) {
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMsg('');
+    
+    try {
+      if (isLogin) {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        onClose();
+      } else {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        alert('Pendaftaran berhasil! Silakan periksa email Anda jika diperlukan, atau langsung masuk.');
+        setIsLogin(true);
+      }
+    } catch (error) {
+      setErrorMsg(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+      <div className="bg-slate-900 border border-white/10 p-8 rounded-2xl w-full max-w-md relative shadow-2xl">
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-white">
+          <X className="w-6 h-6" />
+        </button>
+        <div className="text-center mb-6">
+          <Mail className="w-12 h-12 text-blue-500 mx-auto mb-3" />
+          <h2 className="text-2xl font-bold">{isLogin ? 'Masuk ke Akun' : 'Daftar Akun Baru'}</h2>
+          <p className="text-slate-400 text-sm mt-1">Akses video premium tanpa batas.</p>
+        </div>
+
+        {errorMsg && <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-lg text-sm mb-4">{errorMsg}</div>}
+
+        <form onSubmit={handleAuth} className="space-y-4">
+          <div>
+            <label className="block text-sm text-slate-300 mb-1">Email</label>
+            <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2 text-white outline-none focus:border-blue-500" placeholder="nama@email.com" />
+          </div>
+          <div>
+            <label className="block text-sm text-slate-300 mb-1">Password</label>
+            <input type="password" required value={password} onChange={e => setPassword(e.target.value)} minLength="6" className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2 text-white outline-none focus:border-blue-500" placeholder="Minimal 6 karakter" />
+          </div>
+          <button disabled={loading} type="submit" className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-2.5 rounded-lg mt-2 transition-colors">
+            {loading ? 'Memproses...' : isLogin ? 'Masuk' : 'Daftar Sekarang'}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center text-sm text-slate-400">
+          {isLogin ? 'Belum punya akun? ' : 'Sudah punya akun? '}
+          <button onClick={() => setIsLogin(!isLogin)} className="text-blue-400 hover:underline font-semibold">
+            {isLogin ? 'Daftar di sini' : 'Masuk di sini'}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -133,9 +243,13 @@ function Home({ videos }) {
   );
 }
 
-function VideoPlayer({ videos }) {
+function VideoPlayer({ videos, session, onOpenLogin }) {
   const { id } = useParams();
   const video = videos.find(v => v.id === parseInt(id));
+
+  // TODO: Nanti isUserPremium dicek dari database (kolom is_premium)
+  // Saat ini kita simulasikan: jika sudah login = premium sementara (untuk uji coba auth).
+  const isUserPremium = session !== null;
 
   if (!video) {
     return <div className="text-center py-20 text-slate-400">Video tidak ditemukan.</div>;
@@ -145,15 +259,57 @@ function VideoPlayer({ videos }) {
     <div className="max-w-6xl mx-auto flex flex-col lg:flex-row gap-6">
       {/* Bagian Utama (Player) */}
       <div className="flex-1 space-y-4">
-        <div className="aspect-video w-full bg-black rounded-xl overflow-hidden shadow-2xl border border-white/10">
-          <iframe 
-            src={video.embedUrl} 
-            title={video.title}
-            className="w-full h-full"
-            frameBorder="0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          ></iframe>
+        <div className="aspect-video w-full bg-black rounded-xl overflow-hidden shadow-2xl border border-white/10 relative">
+          {video.isPremium && !isUserPremium ? (
+            // Layar Terkunci (Paywall)
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-slate-900/95 backdrop-blur-sm z-10 text-center">
+              <div className="w-16 h-16 bg-purple-600/20 rounded-full flex items-center justify-center mb-4 border border-purple-500/50">
+                <Lock className="w-8 h-8 text-purple-400" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Video Premium Eksklusif</h2>
+              <p className="text-slate-300 text-sm max-w-md mb-6">
+                Video ini hanya tersedia untuk member premium. Dukung kreator untuk membuka akses penuh ke seluruh konten eksklusif.
+              </p>
+              
+              {session ? (
+                <a 
+                  href={`https://trakteer.id/akun_anda/tip?quantity=1&message=${encodeURIComponent(session.user.email)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 text-white font-bold py-3 px-8 rounded-full transition-all shadow-lg shadow-red-500/30 hover:shadow-red-500/50 hover:scale-105 mb-6"
+                >
+                  <Coffee className="w-5 h-5" /> Buka Akses via Trakteer
+                </a>
+              ) : (
+                <button 
+                  onClick={onOpenLogin}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-full transition-all shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-105 mb-6"
+                >
+                  <User className="w-5 h-5" /> Login Dulu untuk Buka Akses
+                </button>
+              )}
+
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 max-w-lg flex gap-3 text-left">
+                <AlertTriangle className="w-6 h-6 text-amber-500 flex-shrink-0" />
+                <div>
+                  <h4 className="font-bold text-amber-400 text-sm mb-1">PENTING SEBELUM MEMBAYAR</h4>
+                  <p className="text-xs text-amber-200/80 leading-relaxed">
+                    Pastikan Anda mendaftar/login di web ini terlebih dahulu. Saat melakukan pembayaran di Trakteer, Anda <strong>WAJIB</strong> mengisi alamat email pendaftaran Anda pada kolom pesan Trakteer agar sistem kami mengenali pembayaran Anda secara otomatis.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            // Pemutar Video Normal
+            <iframe 
+              src={video.embedUrl} 
+              title={video.title}
+              className="w-full h-full"
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            ></iframe>
+          )}
         </div>
         <div className="p-4 bg-slate-900/50 rounded-xl border border-white/5">
           <div className="flex items-start justify-between">
