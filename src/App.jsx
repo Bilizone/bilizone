@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Routes, Route, Link, useNavigate, useParams } from 'react-router-dom'
-import { Search, Menu, User, Plus, LogOut, Lock } from 'lucide-react'
+import { Search, Menu, User, Plus, LogOut, Lock, Trash2 } from 'lucide-react'
 
 // Dummy Data Awal
 const initialVideos = [
@@ -20,6 +20,12 @@ function App() {
 
   const addVideo = (newVideo) => {
     setVideos([{ ...newVideo, id: Date.now() }, ...videos]);
+  };
+
+  const deleteVideo = (id) => {
+    if (window.confirm('Yakin ingin menghapus video ini?')) {
+      setVideos(videos.filter(v => v.id !== id));
+    }
   };
 
   return (
@@ -78,6 +84,8 @@ function App() {
               isLoggedIn={isAdminLoggedIn} 
               setIsLoggedIn={setIsAdminLoggedIn} 
               onAddVideo={addVideo}
+              videos={videos}
+              onDeleteVideo={deleteVideo}
             />} />
           </Routes>
         </main>
@@ -196,7 +204,7 @@ function VideoPlayer({ videos }) {
   )
 }
 
-function Admin({ isLoggedIn, setIsLoggedIn, onAddVideo }) {
+function Admin({ isLoggedIn, setIsLoggedIn, onAddVideo, videos, onDeleteVideo }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -259,7 +267,7 @@ function Admin({ isLoggedIn, setIsLoggedIn, onAddVideo }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors"
-              placeholder="mediakindo@gmail.com"
+              placeholder="Masukkan email admin"
             />
           </div>
           <div>
@@ -376,6 +384,39 @@ function Admin({ isLoggedIn, setIsLoggedIn, onAddVideo }) {
             Posting Video
           </button>
         </form>
+      </div>
+
+      {/* Daftar Video Anda */}
+      <div className="mt-8 glass-panel p-6 bg-slate-900/50 border border-white/10 rounded-2xl shadow-xl">
+        <h3 className="text-xl font-semibold mb-6">Video Anda ({videos.length})</h3>
+        
+        <div className="space-y-4">
+          {videos.length === 0 ? (
+            <p className="text-slate-400 text-center py-8">Belum ada video yang diposting.</p>
+          ) : (
+            videos.map(video => (
+              <div key={video.id} className="flex items-center gap-4 bg-slate-800/50 p-4 rounded-xl border border-white/5 hover:border-white/10 transition-colors">
+                <div className="w-32 aspect-video rounded-lg overflow-hidden flex-shrink-0 bg-slate-900">
+                  <img src={video.thumbnail || `https://source.unsplash.com/random/400x225/?${video.category}`} alt={video.title} className="w-full h-full object-cover" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-slate-200 truncate">{video.title}</h4>
+                  <div className="flex items-center gap-3 mt-1 text-xs">
+                    <span className="text-slate-400">{video.category}</span>
+                    {video.isPremium && <span className="text-purple-400 font-semibold bg-purple-500/10 px-2 py-0.5 rounded">Premium</span>}
+                  </div>
+                </div>
+                <button 
+                  onClick={() => onDeleteVideo(video.id)}
+                  className="p-3 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors flex-shrink-0"
+                  title="Hapus Video"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   )
